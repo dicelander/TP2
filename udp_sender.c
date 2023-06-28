@@ -8,7 +8,7 @@
 #include <time.h>
 
 #define BUFSIZE 1024
-#define PORT 8080
+#define PORT 55555
 #define COUNT 100000
 #define IP "127.0.0.1"
 
@@ -30,6 +30,8 @@ int main() {
     addr.sin_port = htons(PORT);
     addr.sin_addr.s_addr = inet_addr(IP);
 
+    printf("UDP Sender sending to IP %s on port %d\n", IP, PORT);
+
     for (int msg_size = 1; msg_size <= 1000; msg_size += 100) {
         memset(buf, 'a', msg_size);
 
@@ -37,7 +39,8 @@ int main() {
 
         for (int i = 0; i < COUNT; i++) {
             sendto(sock, buf, msg_size, 0, (struct sockaddr *)&addr, sizeof(addr));
-            recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
+            int len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
+            // printf("Received echo message of size %d\n", len);
         }
 
         clock_gettime(CLOCK_MONOTONIC, &end);

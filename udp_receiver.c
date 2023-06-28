@@ -7,7 +7,7 @@
 #include <arpa/inet.h>
 
 #define BUFSIZE 1024
-#define PORT 555555
+#define PORT 55555
 
 int main() {
     int sock;
@@ -31,10 +31,13 @@ int main() {
         exit(1);
     }
 
+    printf("UDP Receiver running on port %d\n", PORT);
+
     while(1) {
         addr_len = sizeof(addr);
         int len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
         if(len > 0) {
+            printf("Received message of size %d\n", len);
             sendto(sock, buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
         }
     }
