@@ -59,11 +59,11 @@ int main() {
     int new_batch = 1;
 
     // Open file to write received messages
-    FILE *received_file = fopen("received_messages.txt", "w");
-    if (received_file == NULL) {
-        perror("Error opening received messages file");
-        exit(1);
-    }
+    // FILE *received_file = fopen("received_messages.txt", "w");
+    // if (received_file == NULL) {
+    //     perror("Error opening received messages file");
+    //     exit(1);
+    // }
 
     while (1) {
         addr_len = sizeof(addr);
@@ -101,7 +101,7 @@ int main() {
             unsigned char id_sent = buf[0];  // Extract the ID directly from the message
 
             // Write received message to file
-            writeMessageToFile(received_file, len, id_sent);
+            // writeMessageToFile(received_file, len, id_sent);
 
             // Update progress
             received_count++;
@@ -120,7 +120,7 @@ int main() {
         }
     }
 
-    fclose(received_file);  // Close the received messages file
+    // fclose(received_file);  // Close the received messages file
 
     return 0;
 }

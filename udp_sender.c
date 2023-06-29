@@ -100,11 +100,11 @@ int main(int argc, char *argv[]) {
         // Open file to write sent messages
         char sent_file_name[50];
         sprintf(sent_file_name, "sent_messages_size_%d.txt", msg_size);
-        FILE *sent_file = fopen(sent_file_name, "w");
-        if (sent_file == NULL) {
-            perror("Error opening sent messages file");
-            exit(1);
-        }
+        // FILE *sent_file = fopen(sent_file_name, "w");
+        // if (sent_file == NULL) {
+        //     perror("Error opening sent messages file");
+        //     exit(1);
+        // }
 
         for (int i = 0; i < COUNT; i++) {
             clock_gettime(CLOCK_MONOTONIC, &start);
@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
             unsigned char received_id = buf[0];
 
             // Write sent message and received ID to file
-            writeMessageToFile(sent_file, msg_size, id, received_id);
+            // writeMessageToFile(sent_file, msg_size, id, received_id);
 
             // Check if the echoed message is the same as the original message
             if (memcmp(numbered_buf, buf, msg_size) != 0) {
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        fclose(sent_file);  // Close the sent messages file
+        // fclose(sent_file);  // Close the sent messages file
 
         double mean_time = (double)total_time / COUNT / 1000000000;
         double throughput = (double)total_sent_bytes / total_time;
