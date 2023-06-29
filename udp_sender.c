@@ -9,7 +9,7 @@
 #include <unistd.h>
 
 #define BUFSIZE 65536
-#define COUNT 10
+#define COUNT 100000
 #define WINDOW_SIZE 255
 
 void printProgressBar(double progress, int count) {
@@ -51,8 +51,8 @@ int main(int argc, char *argv[]) {
     }
 
     struct timeval timeout;
-    timeout.tv_usec = 500000;
-    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+    timeout.tv_sec = 1;
 
     if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
         perror("setsockopt");
@@ -66,9 +66,18 @@ int main(int argc, char *argv[]) {
 
     printf("UDP Sender sending to IP %s on port %s\n", argv[1], argv[2]);
 
+    FILE *csv_file = fopen("output.csv", "w");
+    if (csv_file == NULL) {
+        perror("Error opening CSV file");
+        exit(1);
+    }
+
+    // Write CSV headers
+    fprintf(csv_file, "Total Time (ns), Mean Time (s), Throughput (bytes/ns), Mean Throughput (bytes/s), Total Sent Bytes (bytes), Total Received Bytes (bytes), Total Attempts, Number of Timeouts\n");
+
     // for (int size = 1; size <= 1001; size += 100) {
     //     int msg_size = (size > 1) ? (size - 1) : size;
-    for (int size = 1024; size <= 32768; size += 1024) {
+    for (int size = 1; size <= 32768; size = (size < 1000) ? ((size == 1) ? size + 99 : size + 100) : ((size == 1000) ? size + 24 : size + 1024)) {
         int msg_size = size;
         int timeout_count = 0;
         total_time = 0;
@@ -111,7 +120,7 @@ int main(int argc, char *argv[]) {
             int len = sendto(sock, numbered_buf, msg_size, 0, (struct sockaddr *)&addr, sizeof(addr));
 
             if (len < 0) {
-                printf("\nTimeout occurred! Continuing...\n");
+                printf("\nCouldn't send the message id=%d! Continuing...\n", id);
                 timeout_count++;
                 continue;
             }
@@ -159,14 +168,21 @@ int main(int argc, char *argv[]) {
         fclose(sent_file);  // Close the sent messages file
 
         double mean_time = (double)total_time / COUNT / 1000000000;
-
+        double throughput = (double)total_sent_bytes / total_time;
+        double mean_throughput = (double)msg_size / mean_time;
         printf("\nTotal Time for the Test: %ld nanoseconds\n", total_time);
         printf("Mean Time: %e seconds\n", mean_time);
+        printf("Throughput: %e bytes/second\n", throughput);
+        printf("Mean throughput: %e bytes/second\n", mean_throughput);
         printf("Total Sent Bytes: %ld bytes\n", total_sent_bytes);
         printf("Total Received Bytes: %ld bytes\n", total_received_bytes);
         printf("Timeouts: %d\n", timeout_count);
         printf("---------------------------------------\n");
 
+        // Write to CSV file
+        fprintf(csv_file, "%ld, %e, %e, %e, %ld, %ld, %d, %d\n",
+                total_time, mean_time, throughput, mean_throughput, total_sent_bytes, total_received_bytes, COUNT, timeout_count);
+        fflush(csv_file);
         // Send stop message to the echoer if STOP_ACK was not received
         if (!stopAckReceived) {
             char stop_msg[] = "STOP";
@@ -178,6 +194,7 @@ int main(int argc, char *argv[]) {
         recvfrom(sock, final_ack_msg, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
     }
 
+    fclose(csv_file);  // Close the CSV file
     close(sock);
 
     return 0;
