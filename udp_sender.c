@@ -6,29 +6,36 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <unistd.h>
 
 #define BUFSIZE 1024
 #define PORT 55555
 #define COUNT 100000
+#define WINDOW_SIZE 10
 
-void printProgressBar(double progress, int count) {
+void printProgressBar(double progress, int count)
+{
     int barWidth = 70;
     int filledWidth = progress * barWidth;
 
     printf("\r[");
-    for (int i = 0; i < filledWidth; ++i) {
+    for (int i = 0; i < filledWidth; ++i)
+    {
         printf("=");
     }
     printf(">");
-    for (int i = filledWidth; i < barWidth; ++i) {
+    for (int i = filledWidth; i < barWidth; ++i)
+    {
         printf(" ");
     }
     printf("] %.2f%% (%d/%d)", progress * 100, count, COUNT);
     fflush(stdout);
 }
 
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
+int main(int argc, char *argv[])
+{
+    if (argc < 2)
+    {
         printf("Usage: %s <destination IP>\n", argv[0]);
         return 1;
     }
@@ -38,11 +45,22 @@ int main(int argc, char *argv[]) {
     char buf[BUFSIZE];
     socklen_t addr_len;
     struct timespec start, end;
-    long total_time, total_sent_bytes;
+    long total_time, total_sent_bytes, total_received_bytes;
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
+    if (sock < 0)
+    {
         perror("socket");
+        exit(1);
+    }
+
+    struct timeval timeout;
+    timeout.tv_usec = 500000;
+    timeout.tv_sec = 0;
+
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+    {
+        perror("setsockopt");
         exit(1);
     }
 
@@ -53,41 +71,56 @@ int main(int argc, char *argv[]) {
 
     printf("UDP Sender sending to IP %s on port %d\n", argv[1], PORT);
 
-    for (int size = 1; size <= 1001; size += 100) {
+    for (int size = 1; size <= 1001; size += 100)
+    {
         int msg_size = (size > 1) ? (size - 1) : size;
-        memset(buf, 'a', msg_size);
+        int timeout_count = 0;
         total_time = 0;
         total_sent_bytes = 0;
+        total_received_bytes = 0;
 
-        // Send COUNT and msg_size to the receiver
+        // Send COUNT, msg_size, and window size to the receiver
         char info_msg[BUFSIZE];
-        snprintf(info_msg, BUFSIZE, "%d:%d", COUNT, msg_size);
+        snprintf(info_msg, BUFSIZE, "%d:%d:%d", COUNT, msg_size, WINDOW_SIZE);
         sendto(sock, info_msg, strlen(info_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
+
 
         // Wait for acknowledgment from the receiver
         char ack_msg[BUFSIZE];
         recvfrom(sock, ack_msg, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
 
         printf("Message Size: %d bytes\n", msg_size);
-        printf("Progress: ");
-        fflush(stdout);
 
-        for (int i = 0; i < COUNT; i++) {
+        for (int i = 0; i < COUNT; i++)
+        {
             clock_gettime(CLOCK_MONOTONIC, &start);
-            sendto(sock, buf, msg_size, 0, (struct sockaddr *)&addr, sizeof(addr));
+
+            // Create the message with ID and zero padding
+            char numbered_buf[BUFSIZE];
+            snprintf(numbered_buf, BUFSIZE, "%08d:%s", i, buf);
+
+            sendto(sock, numbered_buf, strlen(numbered_buf), 0, (struct sockaddr *)&addr, sizeof(addr));
             int len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
+            if (len < 0)
+            {
+                printf("\nTimeout occurred! Continuing...\n");
+                timeout_count++;
+                continue;
+            }
             clock_gettime(CLOCK_MONOTONIC, &end);
 
             long seconds = end.tv_sec - start.tv_sec;
             long ns = end.tv_nsec - start.tv_nsec;
 
-            if (start.tv_nsec > end.tv_nsec) { // clock underflow
+            if (start.tv_nsec > end.tv_nsec)
+            { // clock underflow
                 --seconds;
                 ns += 1000000000;
             }
 
             total_time += seconds * 1000000000 + ns;
-            total_sent_bytes += len;
+            total_sent_bytes += (len >= 0) ? msg_size : 0;
+            total_received_bytes += (len >= 0) ? len : 0;
 
             double progress = (double)(i + 1) / COUNT;
             printProgressBar(progress, i + 1);
@@ -98,7 +131,15 @@ int main(int argc, char *argv[]) {
         printf("\nTotal Time for the Test: %ld nanoseconds\n", total_time);
         printf("Mean Time: %e seconds\n", mean_time);
         printf("Total Sent Bytes: %ld bytes\n", total_sent_bytes);
+        printf("Total Received Bytes: %ld bytes\n", total_received_bytes);
+        printf("Timeouts: %d\n", timeout_count);
         printf("---------------------------------------\n");
+
+        // Send stop message to the receiver
+        char stop_msg[] = "STOP";
+        sendto(sock, stop_msg, strlen(stop_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
+
+        sleep(1); // Delay for 1 second
     }
 
     return 0;

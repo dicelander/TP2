@@ -9,30 +9,35 @@
 #define BUFSIZE 1024
 #define PORT 55555
 
-void printProgressBar(double progress, int count, int totalCount) {
+void printProgressBar(double progress, int count, int totalCount)
+{
     int barWidth = 70;
     int filledWidth = progress * barWidth;
 
     printf("\r[");
-    for (int i = 0; i < filledWidth; ++i) {
+    for (int i = 0; i < filledWidth; ++i)
+    {
         printf("=");
     }
     printf(">");
-    for (int i = filledWidth; i < barWidth; ++i) {
+    for (int i = filledWidth; i < barWidth; ++i)
+    {
         printf(" ");
     }
     printf("] %.2f%% (%d/%d)", progress * 100, count, totalCount);
     fflush(stdout);
 }
 
-int main() {
+int main()
+{
     int sock;
     struct sockaddr_in addr;
     char buf[BUFSIZE];
     socklen_t addr_len;
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
+    if (sock < 0)
+    {
         perror("socket");
         exit(1);
     }
@@ -42,23 +47,25 @@ int main() {
     addr.sin_port = htons(PORT);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
         perror("bind");
         exit(1);
     }
 
     printf("UDP Receiver running on port %d\n", PORT);
 
-    while (1) {
+    while (1)
+    {
         addr_len = sizeof(addr);
 
-        // Receive COUNT and msg_size from the sender
+        // Receive COUNT, msg_size, and window size from the sender
         char info_msg[BUFSIZE];
         recvfrom(sock, info_msg, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
 
-        // Parse COUNT and msg_size values
-        int count, msg_size;
-        sscanf(info_msg, "%d:%d", &count, &msg_size);
+        // Parse COUNT, msg_size, and window size values
+        int count, msg_size, window_size;
+        sscanf(info_msg, "%d:%d:%d", &count, &msg_size, &window_size);
 
         printf("Received message size: %d bytes\n", msg_size);
         printf("Total messages to receive: %d\n", count);
@@ -68,26 +75,45 @@ int main() {
 
         // Start receiving the messages with progress bar
         int received_count = 0;
+        int echoed_count = 0;
         double progress = 0.0;
-        printf("Progress: ");
-        fflush(stdout);
 
-        while (received_count < count) {
+        addr_len = sizeof(addr);
+
+        while (1)
+        {
             int len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
-            if (len > 0) {
-                printf("\rProgress: ");
-                fflush(stdout);
+            if (len > 0)
+            {
+                // Check if it's a stop message
+                if (strcmp(buf, "STOP") == 0)
+                {
+                    printf("\nReceived stop message. Echoed messages: %d\n", echoed_count);
+                    break;
+                }
 
                 // Update progress
                 received_count++;
+                echoed_count++;
                 progress = (double)received_count / count;
                 printProgressBar(progress, received_count, count);
-                
+
+                // Retrieve the message ID
+                int messageID = 0;
+                sscanf(buf, "%d", &messageID);
+                printf("\rMessage ID: %d received\n", messageID);
+                fflush(stdout);
+
                 sendto(sock, buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
+
+                // Check if all messages for the current batch have been received
+                if (received_count >= count)
+                {
+                    printf("\n");
+                    break;
+                }
             }
         }
-
-        printf("\n");
     }
 
     return 0;
