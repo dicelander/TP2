@@ -9,6 +9,22 @@
 #define BUFSIZE 1024
 #define PORT 55555
 
+void printProgressBar(double progress, int count, int totalCount) {
+    int barWidth = 70;
+    int filledWidth = progress * barWidth;
+
+    printf("\r[");
+    for (int i = 0; i < filledWidth; ++i) {
+        printf("=");
+    }
+    printf(">");
+    for (int i = filledWidth; i < barWidth; ++i) {
+        printf(" ");
+    }
+    printf("] %.2f%% (%d/%d)", progress * 100, count, totalCount);
+    fflush(stdout);
+}
+
 int main() {
     int sock;
     struct sockaddr_in addr;
@@ -50,16 +66,28 @@ int main() {
         // Send acknowledgment to the sender
         sendto(sock, "ACK", 3, 0, (struct sockaddr *)&addr, sizeof(addr));
 
-        // Start receiving the messages
+        // Start receiving the messages with progress bar
         int received_count = 0;
+        double progress = 0.0;
+        printf("Progress: ");
+        fflush(stdout);
+
         while (received_count < count) {
             int len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
             if (len > 0) {
-                printf("Received message of size %d\n", len);
-                sendto(sock, buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
+                printf("\rProgress: ");
+                fflush(stdout);
+
+                // Update progress
                 received_count++;
+                progress = (double)received_count / count;
+                printProgressBar(progress, received_count, count);
+                
+                sendto(sock, buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
             }
         }
+
+        printf("\n");
     }
 
     return 0;
