@@ -1,10 +1,10 @@
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -13,29 +13,27 @@
 #define COUNT 100000
 #define WINDOW_SIZE 10
 
-void printProgressBar(double progress, int count)
-{
+void printProgressBar(double progress, int count) {
     int barWidth = 70;
     int filledWidth = progress * barWidth;
 
     printf("\r[");
-    for (int i = 0; i < filledWidth; ++i)
-    {
+    for (int i = 0; i < filledWidth; ++i) {
         printf("=");
     }
-    printf(">");
-    for (int i = filledWidth; i < barWidth; ++i)
-    {
+    for (int i = filledWidth; i < barWidth; ++i) {
         printf(" ");
     }
     printf("] %.2f%% (%d/%d)", progress * 100, count, COUNT);
     fflush(stdout);
 }
 
-int main(int argc, char *argv[])
-{
-    if (argc < 2)
-    {
+void writeMessageToFile(FILE *file, int size, int id_sent, int id_received) {
+    fprintf(file, "%d,%d,%d\n", size, id_sent, id_received);
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
         printf("Usage: %s <destination IP>\n", argv[0]);
         return 1;
     }
@@ -48,8 +46,7 @@ int main(int argc, char *argv[])
     long total_time, total_sent_bytes, total_received_bytes;
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
-    {
+    if (sock < 0) {
         perror("socket");
         exit(1);
     }
@@ -58,8 +55,7 @@ int main(int argc, char *argv[])
     timeout.tv_usec = 500000;
     timeout.tv_sec = 0;
 
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
-    {
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
         perror("setsockopt");
         exit(1);
     }
@@ -71,60 +67,103 @@ int main(int argc, char *argv[])
 
     printf("UDP Sender sending to IP %s on port %d\n", argv[1], PORT);
 
-    for (int size = 1; size <= 1001; size += 100)
-    {
+    for (int size = 1; size <= 1001; size += 100) {
         int msg_size = (size > 1) ? (size - 1) : size;
         int timeout_count = 0;
         total_time = 0;
         total_sent_bytes = 0;
         total_received_bytes = 0;
 
-        // Send COUNT, msg_size, and window size to the receiver
+        // Send COUNT, msg_size, and window size to the echoer
         char info_msg[BUFSIZE];
         snprintf(info_msg, BUFSIZE, "%d:%d:%d", COUNT, msg_size, WINDOW_SIZE);
         sendto(sock, info_msg, strlen(info_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
 
-
-        // Wait for acknowledgment from the receiver
+        // Wait for acknowledgment from the echoer
         char ack_msg[BUFSIZE];
         recvfrom(sock, ack_msg, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
 
         printf("Message Size: %d bytes\n", msg_size);
 
-        for (int i = 0; i < COUNT; i++)
-        {
+        int stopAckReceived = 0;
+
+        // Open file to write sent messages
+        char sent_file_name[50];
+        sprintf(sent_file_name, "sent_messages_size_%d.txt", msg_size);
+        FILE *sent_file = fopen(sent_file_name, "w");
+        if (sent_file == NULL) {
+            perror("Error opening sent messages file");
+            exit(1);
+        }
+
+        for (int i = 0; i < COUNT; i++) {
             clock_gettime(CLOCK_MONOTONIC, &start);
 
-            // Create the message with ID and zero padding
             char numbered_buf[BUFSIZE];
-            snprintf(numbered_buf, BUFSIZE, "%08d:%s", i, buf);
 
-            sendto(sock, numbered_buf, strlen(numbered_buf), 0, (struct sockaddr *)&addr, sizeof(addr));
-            int len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
-            if (len < 0)
-            {
+            // Create the message with ID and zero padding
+            memset(numbered_buf, '0', sizeof(numbered_buf));  // Fill with zeros
+
+            int id = i % WINDOW_SIZE;  // Create a cyclic ID based on the WINDOW_SIZE
+
+            int id_len = snprintf(NULL, 0, "%d", id);  // Find out how many characters the ID will take
+
+            if (id_len > msg_size) {
+                printf("Message size too small to fit ID. Increase message size or decrease WINDOW_SIZE.\n");
+                exit(1);
+            }
+
+            sprintf(numbered_buf, "%d", id);  // Write the ID
+
+            int len = sendto(sock, numbered_buf, msg_size, 0, (struct sockaddr *)&addr, sizeof(addr));
+
+            if (len < 0) {
                 printf("\nTimeout occurred! Continuing...\n");
                 timeout_count++;
                 continue;
             }
+
+            // Receive echo from the echoer
+            memset(buf, 0, sizeof(buf));
+            len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
+            if (len < 0) {
+                printf("\nTimeout occurred while receiving echo! Continuing...\n");
+                timeout_count++;
+                continue;
+            }
+
             clock_gettime(CLOCK_MONOTONIC, &end);
 
             long seconds = end.tv_sec - start.tv_sec;
             long ns = end.tv_nsec - start.tv_nsec;
 
-            if (start.tv_nsec > end.tv_nsec)
-            { // clock underflow
+            if (start.tv_nsec > end.tv_nsec) {  // clock underflow
                 --seconds;
                 ns += 1000000000;
             }
 
             total_time += seconds * 1000000000 + ns;
-            total_sent_bytes += (len >= 0) ? msg_size : 0;
-            total_received_bytes += (len >= 0) ? len : 0;
+            total_sent_bytes += msg_size;
+            total_received_bytes += len;
 
             double progress = (double)(i + 1) / COUNT;
             printProgressBar(progress, i + 1);
+
+            // Parse the received message to extract the ID
+            int received_id = atoi(buf);
+
+            // Write sent message and received ID to file
+            writeMessageToFile(sent_file, msg_size, id, received_id);
+
+            // Check if the echoed message is the same as the original message
+            if (memcmp(numbered_buf, buf, msg_size) != 0) {
+                printf("Message mismatched: Sent message = %s, Received message = %s\n", numbered_buf, buf);
+                i--;  // Resend the message by decrementing the loop counter
+                continue;
+            }
         }
+
+        fclose(sent_file);  // Close the sent messages file
 
         double mean_time = (double)total_time / COUNT / 1000000000;
 
@@ -135,12 +174,18 @@ int main(int argc, char *argv[])
         printf("Timeouts: %d\n", timeout_count);
         printf("---------------------------------------\n");
 
-        // Send stop message to the receiver
-        char stop_msg[] = "STOP";
-        sendto(sock, stop_msg, strlen(stop_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
+        // Send stop message to the echoer if STOP_ACK was not received
+        if (!stopAckReceived) {
+            char stop_msg[] = "STOP";
+            sendto(sock, stop_msg, strlen(stop_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
+        }
 
-        sleep(1); // Delay for 1 second
+        // Wait for a final acknowledgment from the echoer
+        char final_ack_msg[BUFSIZE];
+        recvfrom(sock, final_ack_msg, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
     }
+
+    close(sock);
 
     return 0;
 }
