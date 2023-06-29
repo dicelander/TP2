@@ -59,13 +59,15 @@ int main()
     {
         addr_len = sizeof(addr);
 
-        // Receive COUNT, msg_size, and window size from the sender
-        char info_msg[BUFSIZE];
-        recvfrom(sock, info_msg, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
-
-        // Parse COUNT, msg_size, and window size values
+        // Wait for the initial message from the sender containing the number of messages to expect
         int count, msg_size, window_size;
-        sscanf(info_msg, "%d:%d:%d", &count, &msg_size, &window_size);
+        char buf[BUFSIZE];
+        ssize_t len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
+        if (len > 0)
+        {
+            buf[len] = '\0'; // Null-terminate the string
+            sscanf(buf, "%d:%d:%d", &count, &msg_size, &window_size);
+        }
 
         printf("Received message size: %d bytes\n", msg_size);
         printf("Total messages to receive: %d\n", count);
