@@ -5,9 +5,12 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
+#include <poll.h>
 
 #define BUFSIZE 65536
 #define PORT 55555
+#define TIMEOUT_MS 5000
 
 void printProgressBar(double progress, int count, int totalCount) {
     int barWidth = 70;
@@ -53,6 +56,10 @@ int main() {
 
     printf("UDP Receiver running on port %d\n", PORT);
 
+    struct pollfd fds[1];
+    fds[0].fd = sock;
+    fds[0].events = POLLIN;
+
     int count = 0, msg_size = 0, window_size = 0;
     int received_count = 0, echoed_count = 0;
     double progress = 0.0;
@@ -66,6 +73,16 @@ int main() {
     }
 
     while (1) {
+        int pollResult = poll(fds, 1, TIMEOUT_MS);
+
+        if (pollResult < 0) {
+            perror("poll");
+            break;
+        } else if (pollResult == 0) {
+            printf("Timeout occurred. No data received.\n");
+            break;
+        }
+
         addr_len = sizeof(addr);
         int len = recvfrom(sock, buf, BUFSIZE, 0, (struct sockaddr *)&addr, &addr_len);
         if (len > 0) {
@@ -108,9 +125,6 @@ int main() {
             echoed_count++;
             progress = (double)received_count / count;
             printProgressBar(progress, received_count, count);
-
-            // Send echo back to the sender
-            sendto(sock, buf, len, 0, (struct sockaddr *)&addr, addr_len);  // Update length parameter
 
             // Check if all messages for the current batch have been received
             if (received_count >= count) {
