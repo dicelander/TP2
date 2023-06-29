@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define BUFSIZE 1024
+#define BUFSIZE 65536
 #define PORT 55555
 
 void printProgressBar(double progress, int count, int totalCount) {
@@ -51,7 +51,7 @@ int main() {
         exit(1);
     }
 
-    printf("UDP Echoer running on port %d\n", PORT);
+    printf("UDP Receiver running on port %d\n", PORT);
 
     int count = 0, msg_size = 0, window_size = 0;
     int received_count = 0, echoed_count = 0;
@@ -98,8 +98,7 @@ int main() {
                 continue;       // Skip to next iteration
             }
 
-            int id_sent;
-            id_sent = atoi(buf);  // Extract the ID directly from the message
+            unsigned char id_sent = buf[0];  // Extract the ID directly from the message
 
             // Write received message to file
             writeMessageToFile(received_file, len, id_sent);

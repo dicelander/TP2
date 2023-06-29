@@ -8,8 +8,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define BUFSIZE 1024
-#define COUNT 100000
+#define BUFSIZE 65536
+#define COUNT 10
 #define WINDOW_SIZE 255
 
 void printProgressBar(double progress, int count) {
@@ -66,8 +66,10 @@ int main(int argc, char *argv[]) {
 
     printf("UDP Sender sending to IP %s on port %s\n", argv[1], argv[2]);
 
-    for (int size = 1; size <= 1001; size += 100) {
-        int msg_size = (size > 1) ? (size - 1) : size;
+    // for (int size = 1; size <= 1001; size += 100) {
+    //     int msg_size = (size > 1) ? (size - 1) : size;
+    for (int size = 1024; size <= 32768; size += 1024) {
+        int msg_size = size;
         int timeout_count = 0;
         total_time = 0;
         total_sent_bytes = 0;
