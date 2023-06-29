@@ -51,7 +51,7 @@ int main() {
         exit(1);
     }
 
-    printf("UDP Receiver running on port %d\n", PORT);
+    printf("UDP Echoer running on port %d\n", PORT);
 
     int count = 0, msg_size = 0, window_size = 0;
     int received_count = 0, echoed_count = 0;

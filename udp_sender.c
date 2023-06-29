@@ -9,9 +9,8 @@
 #include <unistd.h>
 
 #define BUFSIZE 1024
-#define PORT 55555
 #define COUNT 100000
-#define WINDOW_SIZE 10
+#define WINDOW_SIZE 255
 
 void printProgressBar(double progress, int count) {
     int barWidth = 70;
@@ -33,8 +32,8 @@ void writeMessageToFile(FILE *file, int size, int id_sent, int id_received) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        printf("Usage: %s <destination IP>\n", argv[0]);
+    if (argc < 3) {
+        printf("Usage: %s <destination IP> <destinatio port>\n", argv[0]);
         return 1;
     }
 
@@ -62,10 +61,10 @@ int main(int argc, char *argv[]) {
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
+    addr.sin_port = htons(atoi(argv[2]));
     addr.sin_addr.s_addr = inet_addr(argv[1]);
 
-    printf("UDP Sender sending to IP %s on port %d\n", argv[1], PORT);
+    printf("UDP Sender sending to IP %s on port %s\n", argv[1], argv[2]);
 
     for (int size = 1; size <= 1001; size += 100) {
         int msg_size = (size > 1) ? (size - 1) : size;
@@ -102,18 +101,10 @@ int main(int argc, char *argv[]) {
             char numbered_buf[BUFSIZE];
 
             // Create the message with ID and zero padding
-            memset(numbered_buf, '0', sizeof(numbered_buf));  // Fill with zeros
+            memset(numbered_buf, 0, sizeof(numbered_buf));  // Fill with zeros
 
-            int id = i % WINDOW_SIZE;  // Create a cyclic ID based on the WINDOW_SIZE
-
-            int id_len = snprintf(NULL, 0, "%d", id);  // Find out how many characters the ID will take
-
-            if (id_len > msg_size) {
-                printf("Message size too small to fit ID. Increase message size or decrease WINDOW_SIZE.\n");
-                exit(1);
-            }
-
-            sprintf(numbered_buf, "%d", id);  // Write the ID
+            unsigned char id = i % WINDOW_SIZE;  // Create a cyclic ID based on the WINDOW_SIZE
+            numbered_buf[0] = id;                // Write the ID at the start of the buffer
 
             int len = sendto(sock, numbered_buf, msg_size, 0, (struct sockaddr *)&addr, sizeof(addr));
 
@@ -150,14 +141,14 @@ int main(int argc, char *argv[]) {
             printProgressBar(progress, i + 1);
 
             // Parse the received message to extract the ID
-            int received_id = atoi(buf);
+            unsigned char received_id = buf[0];
 
             // Write sent message and received ID to file
             writeMessageToFile(sent_file, msg_size, id, received_id);
 
             // Check if the echoed message is the same as the original message
             if (memcmp(numbered_buf, buf, msg_size) != 0) {
-                printf("Message mismatched: Sent message = %s, Received message = %s\n", numbered_buf, buf);
+                printf("Message mismatched: Sent message ID = %d, Received message ID = %d\n", id, received_id);
                 i--;  // Resend the message by decrementing the loop counter
                 continue;
             }
